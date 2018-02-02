@@ -1,8 +1,13 @@
-hidden_dim = 512
+hidden_dim = 256
 attention_dim = 128
 use_attention = True
 use_embedding = True
-embedding_dim = 200
+embedding_dim = 128
 length_increase = 1
 vocab_dim = 50004
-max_extended_vocab_dim = 50404
+max_extended_vocab_dim = 50154
+num_encoder_layer = 1
+use_point = False
+num_decoder_layer = 1
+use_coverage = False
+cov_lambda = 1
