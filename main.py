@@ -1,6 +1,6 @@
 from model import create_model
 #from train import train,create_reader,get_vocab
-from train import train,create_reader,get_vocab
+from train import train,create_reader,get_vocab,para_train
 import cntk as C
 import numpy as np
 import h_p
@@ -26,15 +26,16 @@ if __name__ == "__main__":
     h_p.num_decoder_layer = args.decoder_layer_num
     h_p.num_encoder_layer = args.encoder_layer_num
     print('start build voc')
-    vocab, i2w, w2i = get_vocab('data/SELF_DATA/voc_50k.txt')
+    vocab, i2w, w2i = get_vocab('data/voc_50k.txt')
     vocab = [x[0] for x in vocab]
     h_p.sentence_start = np.array([i == w2i['<s>'] for i in range(h_p.vocab_dim)], dtype=np.float32)
     h_p.sentence_end_index = vocab.index('</s>')
     print('voc builded')
-
-    C.try_set_default_device(C.gpu(0))
-    train_reader = create_reader('data/SELF_DATA/train.ctf', True)
-    valid_reader = create_reader('data/SELF_DATA/valid.ctf', True)
+    print(C.all_devices())
+    if C.try_set_default_device(C.gpu(0),acquire_device_lock=True):
+        print('success set gpu 0')
+    elif C.try_set_default_device(C.gpu(1),acquire_device_lock=True):
+        print('success set gpu 1')
     if h_p.use_point:
         if h_p.use_coverage:
             print('start build model with point and coverage')
@@ -53,4 +54,4 @@ if __name__ == "__main__":
     model = create_model()
     print('model created')
     #C.cntk_py.set_gpumemory_allocation_trace_level(1)
-    train(train_reader, train_reader, vocab, w2i, model, max_epochs=2, epoch_size=638924687, minibatch_size=args.minibatch_size)
+    para_train(vocab, w2i, model, max_epochs=2, epoch_size=638924687, minibatch_size=args.minibatch_size)

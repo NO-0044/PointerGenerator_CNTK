@@ -1,0 +1,4 @@
+log/rank1
+CNTKCommandTrainInfo: train : 2
+CNTKCommandTrainInfo: CNTKNoMoreCommands_Total : 2
+CNTKCommandTrainBegin: train

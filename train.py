@@ -1,4 +1,5 @@
 import cntk as C
+from cntk.train.training_session import *
 import numpy as np
 import h_p
 import time
@@ -10,13 +11,13 @@ def get_vocab(path):
 
     return (vocab, i2w, w2i)
 
-def create_reader(path, is_training):
+def create_reader(path, is_training,total_number_of_samples):
     return C.io.MinibatchSource(C.io.CTFDeserializer(path, C.io.StreamDefs(
         en_in=C.io.StreamDef(field='S0', shape=h_p.vocab_dim, is_sparse=True),
         en_in_extended=C.io.StreamDef(field='S1', shape=h_p.max_extended_vocab_dim, is_sparse=True),
         de_in=C.io.StreamDef(field='S2', shape=h_p.vocab_dim, is_sparse=True),
         target=C.io.StreamDef(field='S3', shape=h_p.max_extended_vocab_dim, is_sparse=True)
-    )), randomize=is_training, max_sweeps=C.io.INFINITELY_REPEAT if is_training else 1)
+    )), randomize=is_training,max_samples=total_number_of_samples,multithreaded_deserializer=True)
 
 
 enAxis = C.Axis('enAxis')
@@ -89,6 +90,66 @@ def create_model_train(s2smodel,sentence_start):
         return point_model_train
     else:
         return model_train
+
+def create_trainer(model_train,criterion,epoch_size, num_quantization_bits, block_size, warm_up, progress_writers):
+    # Set learning parameters
+    lr_per_sample     = [0.0015625]*20 + [0.00046875]*20 + [0.00015625]*20 + [0.000046875]*10 + [0.000015625]
+    lr_schedule       = C.learning_parameter_schedule_per_sample(lr_per_sample, epoch_size=epoch_size)
+    mms               = [0]*20 + [0.9983347214509387]*20 + [0.9991670137924583]
+    mm_schedule       = C.learners.momentum_schedule_per_sample(mms, epoch_size=epoch_size)
+    # Create learner
+    if block_size != None and num_quantization_bits != 32:
+        raise RuntimeError("Block momentum cannot be used with quantization, please remove quantized_bits option.")
+    local_learner = C.learners.momentum_sgd(model_train.parameters,
+                                            lr_schedule, mm_schedule)
+    if block_size != None:
+        parameter_learner = C.train.distributed.block_momentum_distributed_learner(local_learner, block_size=block_size)
+    else:
+        parameter_learner = C.train.distributed.data_parallel_distributed_learner(local_learner, 
+                                                                                  num_quantization_bits=num_quantization_bits, 
+                                                                                  distributed_after=warm_up)
+    # Create trainer
+    return C.Trainer(None,criterion, parameter_learner, progress_writers)
+
+def para_train(vocab, w2i, s2smodel, max_epochs, epoch_size, minibatch_size):
+    train_reader = create_reader('data/train.ctf', True,max_epochs*epoch_size)
+    sentence_start = np.array([i == w2i['<s>'] for i in range(h_p.vocab_dim)], dtype=np.float32)
+    model_train = create_model_train(s2smodel,sentence_start)
+    criterion = create_criterion_function(model_train)
+    distributed_sync_report_freq = None
+    progress_writers = [C.logging.ProgressPrinter(
+        freq=500,
+        tag='Training',
+        log_to_file="log/log",
+        rank=C.train.distributed.Communicator.rank(),
+        gen_heartbeat=True,
+        num_epochs=max_epochs,
+        distributed_freq=distributed_sync_report_freq)]
+    #progress_writers.append(C.logging.TensorBoardProgressWriter(
+        #freq=500,
+        #log_dir="tensorboard_log/",
+        #rank=C.train.distributed.Communicator.rank(),
+        #model=s2smodel))
+    trainer = create_trainer(model_train,criterion,epoch_size,32,3200,0,progress_writers)
+    if h_p.use_point:
+        input_map = {criterion.arguments[0]: train_reader.streams.en_in,
+                     criterion.arguments[1]: train_reader.streams.en_in_extended,
+                     criterion.arguments[2]: train_reader.streams.de_in,
+                     criterion.arguments[3]: train_reader.streams.target}
+    else:
+        input_map = {criterion.arguments[0]: train_reader.streams.en_in,
+                     criterion.arguments[1]:train_reader.streams.de_in}
+    training_session(
+        trainer=trainer, mb_source = train_reader,
+        model_inputs_to_streams = input_map, 
+        mb_size = minibatch_size,
+        progress_frequency=epoch_size,
+        checkpoint_config = CheckpointConfig(frequency = epoch_size,
+                                             filename = "checkpoint/point_model",
+                                             restore = False)
+    ).train()
+    C.train.distributed.Communicator.finalize()
+
 
 def train(train_reader, valid_reader, vocab, w2i, s2smodel, max_epochs, epoch_size,minibatch_size):
     # create the training wrapper for the s2smodel, as well as the criterion function
