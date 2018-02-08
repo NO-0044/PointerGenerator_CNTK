@@ -25,46 +25,81 @@ deAxis = C.Axis('deAxis')
 EncoderSequence = C.layers.SequenceOver[enAxis]
 DecoderSequence = C.layers.SequenceOver[deAxis]
 
-def create_criterion_function(model):
+def create_criterion_function(model,is_train,start=None,end = None):
     if h_p.use_point:
-        @C.Function
-        @C.layers.Signature(input=EncoderSequence[C.layers.Tensor[h_p.vocab_dim]],
-                            extended_input=EncoderSequence[C.layers.Tensor[h_p.max_extended_vocab_dim]],
-                            de_in=DecoderSequence[C.layers.Tensor[h_p.vocab_dim]],
-                            target=DecoderSequence[C.layers.Tensor[h_p.max_extended_vocab_dim]])
-        def point_criterion(input, extended_input, de_in, target):
-            # criterion function must drop the <s> from the labels
-            postprocessed_de_in = C.sequence.slice(de_in,1 ,0)
-            postprocessed_target = C.sequence.slice(target,1 ,0)
-            z = model(input, extended_input, postprocessed_de_in)
-            print('model outputs')
-            print(repr(z))
-            #if h_p.use_coverage:
-                #ce = C.negate(C.reduce_sum(postprocessed_target*C.log(z[0]), axis=-1), name='log_loss')#+\
-                     #h_p.cov_lambda*C.reduce_sum(z[1], axis=-1,name='cov_loss')
-            #else:
-            ce = C.negate(C.reduce_sum(postprocessed_target*C.log(z), axis=-1), name='loss')
-            #ce = C.sequence.reduce_sum(C.sequence.gather(z[0], postprocessed_labels))
-            #ce = C.cross_entropy_with_softmax(z[0], postprocessed_target)
-            #errs = C.classification_error(z[0], postprocessed_target)
-            print(repr(ce))
-            return ce
+        if is_train:
+            @C.Function
+            @C.layers.Signature(input=EncoderSequence[C.layers.Tensor[h_p.vocab_dim]],
+                                extended_input=EncoderSequence[C.layers.Tensor[h_p.max_extended_vocab_dim]],
+                                de_in=DecoderSequence[C.layers.Tensor[h_p.vocab_dim]],
+                                target=DecoderSequence[C.layers.Tensor[h_p.max_extended_vocab_dim]])
+            def point_criterion_train(input, extended_input, de_in, target):
+                # criterion function must drop the <s> from the labels
+                postprocessed_de_in = C.sequence.slice(de_in,1 ,0)
+                postprocessed_target = C.sequence.slice(target,1 ,0)
+                z = model(input, extended_input, postprocessed_de_in)
+                print('model outputs')
+                print(repr(z))
+                #if h_p.use_coverage:
+                    #ce = C.negate(C.reduce_sum(postprocessed_target*C.log(z[0]), axis=-1), name='log_loss')#+\
+                         #h_p.cov_lambda*C.reduce_sum(z[1], axis=-1,name='cov_loss')
+                #else:
+                ce = C.negate(C.reduce_sum(postprocessed_target*C.log(z[0]), axis=-1), name='loss')
+                error = C.metrics.classification_error(postprocessed_target,z[0])
+                print(repr(ce))
+                return (ce,error)
+            return point_criterion_train
+        else:
+            @C.Function
+            @C.layers.Signature(input=EncoderSequence[C.layers.Tensor[h_p.vocab_dim]],
+                                extended_input=EncoderSequence[C.layers.Tensor[h_p.max_extended_vocab_dim]],
+                                de_in=DecoderSequence[C.layers.Tensor[h_p.vocab_dim]],
+                                target=DecoderSequence[C.layers.Tensor[h_p.max_extended_vocab_dim]])
+            def point_criterion_eval(input, extended_input, de_in, target):
+                # criterion function must drop the <s> from the labels
+                postprocessed_de_in = C.sequence.slice(de_in,1 ,0)
+                postprocessed_target = C.sequence.slice(target,1 ,0)
+                #if h_p.use_coverage:
+                    #ce = C.negate(C.reduce_sum(postprocessed_target*C.log(z[0]), axis=-1), name='log_loss')#+\
+                         #h_p.cov_lambda*C.reduce_sum(z[1], axis=-1,name='cov_loss')
+                #else:
+                unfold = C.layers.UnfoldFrom(lambda history: model(input,extended_input,history)[1] >> C.hardmax,
+                               until_predicate=lambda w: w[...,end],
+                               length_increase=0.5)
+                z = unfold(initial_state=start, dynamic_axes_like=input)
+                ce = C.negate(C.reduce_sum(postprocessed_target*C.log(z[0]), axis=-1), name='loss')
+                error = C.metrics.classification_error(postprocessed_target,z[0])
+                return (ce,error)
+            return point_criterion_eval
     else:
-        @C.Function
-        @C.layers.Signature(input=EncoderSequence[C.layers.Tensor[h_p.vocab_dim]],
-                            de_in=DecoderSequence[C.layers.Tensor[h_p.vocab_dim]])
-        def criterion(input, de_in):
-            # criterion function must drop the <s> from the labels
-            postprocessed_de_in = C.sequence.slice(de_in, 1, 0)
-            z = model(input, postprocessed_de_in)
-            print(repr(z))
-            ce = C.negate(C.reduce_sum(postprocessed_de_in * C.log(z), axis=-1), name='loss')
-            return ce
-
-    if h_p.use_point:
-        return point_criterion
-    else:
-        return criterion
+        if is_train:
+            @C.Function
+            @C.layers.Signature(input=EncoderSequence[C.layers.Tensor[h_p.vocab_dim]],
+                                de_in=DecoderSequence[C.layers.Tensor[h_p.vocab_dim]])
+            def criterion_train(input, de_in):
+                # criterion function must drop the <s> from the labels
+                postprocessed_de_in = C.sequence.slice(de_in, 1, 0)
+                z = model(input, postprocessed_de_in)
+                print(repr(z))
+                ce = C.negate(C.reduce_sum(postprocessed_de_in * C.log(z), axis=-1), name='loss')
+                error = C.metrics.classification_error(postprocessed_de_in,z)
+                return (ce,error)
+            return criterion_train
+        else:
+            @C.Function
+            @C.layers.Signature(input=EncoderSequence[C.layers.Tensor[h_p.vocab_dim]],
+                                de_in=DecoderSequence[C.layers.Tensor[h_p.vocab_dim]])
+            def criterion_eval(input, de_in):
+                postprocessed_de_in = C.sequence.slice(de_in, 1, 0)
+                unfold = C.layers.UnfoldFrom(lambda history: model(input, history) >> C.hardmax,
+                               until_predicate=lambda w: w[...,end],
+                               length_increase=0.5)
+                z = unfold(initial_state=start, dynamic_axes_like=input)
+                print(repr(z))
+                ce = C.negate(C.reduce_sum(postprocessed_de_in * C.log(z), axis=-1), name='loss')
+                error = C.metrics.classification_error(postprocessed_de_in,z)
+                return (ce,error)
+            return criterion_eval
 
 def create_model_train(s2smodel,sentence_start):
     # model used in training (history is known from labels)
@@ -75,7 +110,7 @@ def create_model_train(s2smodel,sentence_start):
 
             # The input to the decoder always starts with the special label sequence start token.
             # Then, use the previous value of the label sequence (for training) or the output (for execution).
-            past_labels = C.layers.Delay(initial_state=C.Constant(sentence_start))(de_in)
+            past_labels = C.layers.Delay(initial_state=sentence_start)(de_in)
             return s2smodel(input, extended_input, past_labels)
     else:
         @C.Function
@@ -83,7 +118,7 @@ def create_model_train(s2smodel,sentence_start):
 
             # The input to the decoder always starts with the special label sequence start token.
             # Then, use the previous value of the label sequence (for training) or the output (for execution).
-            past_labels = C.layers.Delay(initial_state=C.Constant(sentence_start))(de_in)
+            past_labels = C.layers.Delay(initial_state=sentence_start)(de_in)
             return s2smodel(input, past_labels)
 
     if h_p.use_point:
@@ -113,9 +148,12 @@ def create_trainer(model_train,criterion,epoch_size, num_quantization_bits, bloc
 
 def para_train(vocab, w2i, s2smodel, max_epochs, epoch_size, minibatch_size):
     train_reader = create_reader('data/train.ctf', True,max_epochs*epoch_size)
-    sentence_start = np.array([i == w2i['<s>'] for i in range(h_p.vocab_dim)], dtype=np.float32)
+    val_reader = create_reader('data/valid.ctf',True,max_epochs*epoch_size)
+    sentence_start = C.Constant(np.array([i == w2i['<s>'] for i in range(h_p.vocab_dim)], dtype=np.float32))
+    sentence_end_index = vocab.index('</s>')
     model_train = create_model_train(s2smodel,sentence_start)
-    criterion = create_criterion_function(model_train)
+    criterion = create_criterion_function(model_train,True)
+    #eval = create_criterion_function(model_train,False,sentence_start,sentence_end_index)
     distributed_sync_report_freq = None
     progress_writers = [C.logging.ProgressPrinter(
         freq=500,
@@ -125,11 +163,11 @@ def para_train(vocab, w2i, s2smodel, max_epochs, epoch_size, minibatch_size):
         gen_heartbeat=True,
         num_epochs=max_epochs,
         distributed_freq=distributed_sync_report_freq)]
-    #progress_writers.append(C.logging.TensorBoardProgressWriter(
-        #freq=500,
-        #log_dir="tensorboard_log/",
-        #rank=C.train.distributed.Communicator.rank(),
-        #model=s2smodel))
+    progress_writers.append(C.logging.TensorBoardProgressWriter(
+        freq=100,
+        log_dir="tensorboard_log/",
+        rank=C.train.distributed.Communicator.rank(),
+        model=None))
     trainer = create_trainer(model_train,criterion,epoch_size,32,3200,0,progress_writers)
     if h_p.use_point:
         input_map = {criterion.arguments[0]: train_reader.streams.en_in,
@@ -139,20 +177,27 @@ def para_train(vocab, w2i, s2smodel, max_epochs, epoch_size, minibatch_size):
     else:
         input_map = {criterion.arguments[0]: train_reader.streams.en_in,
                      criterion.arguments[1]:train_reader.streams.de_in}
+    #test_cfg = C.train.training_session.TestConfig(
+                                      #minibatch_source = val_reader,
+                                      #minibatch_size = 1000,
+                                      #crterion = eval)
     training_session(
         trainer=trainer, mb_source = train_reader,
-        model_inputs_to_streams = input_map, 
+        model_inputs_to_streams = input_map,
+        max_samples = max_epochs*epoch_size, 
         mb_size = minibatch_size,
         progress_frequency=epoch_size,
-        checkpoint_config = CheckpointConfig(frequency = epoch_size,
+        checkpoint_config = CheckpointConfig(frequency = int(epoch_size/25),
                                              filename = "checkpoint/point_model",
-                                             restore = False)
+                                             restore = False),
+        #test_config = test_cfg
     ).train()
     C.train.distributed.Communicator.finalize()
 
 
-def train(train_reader, valid_reader, vocab, w2i, s2smodel, max_epochs, epoch_size,minibatch_size):
+def train(vocab, w2i, s2smodel, max_epochs, epoch_size,minibatch_size):
     # create the training wrapper for the s2smodel, as well as the criterion function
+    train_reader = create_reader('data/train.ctf', True,max_epochs*epoch_size)
     sentence_start = np.array([i == w2i['<s>'] for i in range(h_p.vocab_dim)], dtype=np.float32)
     model_train = create_model_train(s2smodel,sentence_start)
     criterion = create_criterion_function(model_train)
@@ -178,7 +223,7 @@ def train(train_reader, valid_reader, vocab, w2i, s2smodel, max_epochs, epoch_si
     # print out some useful training information
     C.logging.log_number_of_parameters(model_train);
     print()
-    progress_printer = C.logging.ProgressPrinter(tag='Training')
+    progress_printer = C.logging.ProgressPrinter(tag='Training',metric_is_pct=False)
 
     # a hack to allow us to print sparse vectors
     # sparse_to_dense = create_sparse_to_dense(input_vocab_dim)
@@ -203,10 +248,11 @@ def train(train_reader, valid_reader, vocab, w2i, s2smodel, max_epochs, epoch_si
                 trainer.train_minibatch({criterion.arguments[0]: mb_train[train_reader.streams.en_in],
                                         criterion.arguments[1]: mb_train[train_reader.streams.de_in]})
 
-            progress_printer.update_with_trainer(trainer, with_metric=False)  # log progress
+            progress_printer.update_with_trainer(trainer, with_metric=True)  # log progress
             total_samples += mb_train[train_reader.streams.en_in].num_samples
             if mbs%5 == 1:
                 print("avg_loss since last:%f" % progress_printer.avg_loss_since_last())
+                print("extra info since last:%f" % progress_printer.avg_metric_since_last())
                 print('processed %d output samples, %d input sample in total' % (
                 progress_printer.samples_since_last, total_samples) + " :{0:.0f}%".format(
                     total_samples * 1.0 / epoch_size * 100))

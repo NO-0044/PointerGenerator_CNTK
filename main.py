@@ -55,3 +55,4 @@ if __name__ == "__main__":
     print('model created')
     #C.cntk_py.set_gpumemory_allocation_trace_level(1)
     para_train(vocab, w2i, model, max_epochs=2, epoch_size=638924687, minibatch_size=args.minibatch_size)
+    #train(vocab, w2i, model, max_epochs=2, epoch_size=638924687, minibatch_size=args.minibatch_size)

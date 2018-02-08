@@ -32,6 +32,7 @@ def create_model():
         stab_out = C.layers.Stabilizer()
         # output voc distribution
         voc_out = C.layers.Sequential([
+            C.layers.Stabilizer(),
             C.layers.Dense(h_p.hidden_dim, activation=None),
             C.layers.Dense(h_p.vocab_dim, activation=C.softmax)
         ],name='Pvocab')
@@ -133,20 +134,20 @@ def create_model():
 
                     att_w = C.reshape(h_att.attention_weights,(-1),name='att_w')
                     #print('att_w:\n%s'%repr(att_w))
-                    unpacked_att_w,_ = C.sequence.unpack(att_w, padding_value=0,name='unpack_att_w').outputs
+                    unpacked_att_w,att_mask = C.sequence.unpack(att_w, padding_value=0,name='unpack_att_w').outputs
                     #print('unpacked_att_w:%s'%repr(unpacked_att_w))
-                    extended_input_unpacked,mask = C.sequence.unpack(extended_input, padding_value=0,name='unpack_extended_in').outputs
+                    extended_input_unpacked,input_mask = C.sequence.unpack(extended_input, padding_value=0,name='unpack_extended_in').outputs
                     #print("extended_input_unpacked:%s"%repr(extended_input_unpacked))
                     att_dist_unpacked = C.times(unpacked_att_w, extended_input_unpacked)
                     #print("att_dist_unpacked:%s"%repr(att_dist_unpacked))
                     att_dist = C.to_sequence_like(att_dist_unpacked, att_w)
                     #print("att_dist:%s"%repr(att_dist))
                     pgen = C.sigmoid(pgen_h_att(h_att) + pgen_h(r[0]) + pgen_x(x))
-                    voc_dist = C.pad(voc_dist, pattern=[(0, h_p.max_extended_vocab_dim-h_p.vocab_dim)], mode=C.ops.CONSTANT_PAD, constant_value=0)
-                    extend_dist = pgen*voc_dist + (1 - pgen)*att_dist
-                    extend_dist = stab_out(extend_dist)
+                    voc_extend_dist = C.pad(voc_dist, pattern=[(0, h_p.max_extended_vocab_dim-h_p.vocab_dim)], mode=C.ops.CONSTANT_PAD, constant_value=0)
+                    extend_dist = pgen*voc_extend_dist + (1 - pgen)*att_dist
+                    #extend_dist = stab_out(extend_dist)
                     #print('extended_dist:%s' % repr(extend_dist))
-                    return extend_dist
+                    return extend_dist,voc_dist
         else:
             @C.Function
             def s2s(input, de_in):
@@ -174,7 +175,6 @@ def create_model():
 
                 h_att = attention_model(encoded_h, r[0])
                 voc_dist = voc_out(C.splice(r[0], h_att))
-                voc_dist = stab_out(voc_dist)
                 return voc_dist
 
     if h_p.use_point:

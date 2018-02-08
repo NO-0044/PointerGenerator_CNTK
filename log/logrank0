@@ -2,9 +2,12 @@ log/logrank0
 CNTKCommandTrainInfo: train : 2
 CNTKCommandTrainInfo: CNTKNoMoreCommands_Total : 2
 CNTKCommandTrainBegin: train
- Minibatch[   1- 500]: loss = 0.136931 * 418597, metric = 0.00% * 418597;
- Minibatch[ 501-1000]: loss = -0.538818 * 417885, metric = 0.00% * 417885;
- Minibatch[1001-1500]: loss = -0.795593 * 418116, metric = 0.00% * 418116;
- Minibatch[1501-2000]: loss = -0.964556 * 417334, metric = 0.00% * 417334;
- Minibatch[2001-2500]: loss = -1.086372 * 415433, metric = 0.00% * 415433;
- Minibatch[2501-3000]: loss = -1.189777 * 416122, metric = 0.00% * 416122;
+ Minibatch[   1- 500]: loss = 3.792835 * 348223, metric = 97.29% * 348223;
+ Minibatch[ 501-1000]: loss = 3.789160 * 348654, metric = 97.30% * 348654;
+ Minibatch[1001-1500]: loss = 3.789848 * 347369, metric = 97.30% * 347369;
+ Minibatch[1501-2000]: loss = 3.790607 * 347009, metric = 97.30% * 347009;
+ Minibatch[2001-2500]: loss = 3.788092 * 347779, metric = 97.29% * 347779;
+ Minibatch[2501-3000]: loss = 3.793505 * 345401, metric = 97.30% * 345401;
+ Minibatch[3001-3500]: loss = 3.789623 * 345693, metric = 97.29% * 345693;
+ Minibatch[3501-4000]: loss = 3.785588 * 348484, metric = 97.29% * 348484;
+ Minibatch[4001-4500]: loss = 3.789089 * 344657, metric = 97.30% * 344657;
