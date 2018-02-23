@@ -1,4 +1,13 @@
 log/log
-CNTKCommandTrainInfo: train : 2
-CNTKCommandTrainInfo: CNTKNoMoreCommands_Total : 2
+CNTKCommandTrainInfo: train : 1
+CNTKCommandTrainInfo: CNTKNoMoreCommands_Total : 1
 CNTKCommandTrainBegin: train
+Learning rate per 1 samples: 0.001
+Momentum per 3000 samples: 0.9366416204111472
+Finished Evaluation [1]: Minibatch[1-178]: metric = 81.87% * 99053;
+ Minibatch[   1-  50]: loss = 2.793981 * 24174, metric = 76.95% * 24174;
+ Minibatch[  51- 100]: loss = 3.137719 * 24294, metric = 84.03% * 24294;
+Finished Evaluation [2]: Minibatch[1-178]: metric = 82.88% * 99053;
+ Minibatch[ 101- 150]: loss = 2.877830 * 24781, metric = 76.66% * 24781;
+ Minibatch[ 151- 200]: loss = 2.657422 * 24612, metric = 72.35% * 24612;
+Finished Evaluation [3]: Minibatch[1-178]: metric = 81.97% * 99053;

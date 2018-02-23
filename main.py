@@ -15,6 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("-H", "--hidden_dim", help="hidden dim", type=int, default=256)
     parser.add_argument("-a", "--att_dim", help="attention dim", type=int, default=128)
     parser.add_argument("-b", "--minibatch_size", help="mini batch", type=int, default=3000)
+    parser.add_argument("--epoch_size",type=int,default=638924687)
     parser.add_argument("-c","--use_coverage",help="whether to use coverage",action="store_true")
     args = parser.parse_args()
     if args.use_point:
@@ -31,11 +32,6 @@ if __name__ == "__main__":
     h_p.sentence_start = np.array([i == w2i['<s>'] for i in range(h_p.vocab_dim)], dtype=np.float32)
     h_p.sentence_end_index = vocab.index('</s>')
     print('voc builded')
-    print(C.all_devices())
-    if C.try_set_default_device(C.gpu(0),acquire_device_lock=True):
-        print('success set gpu 0')
-    elif C.try_set_default_device(C.gpu(1),acquire_device_lock=True):
-        print('success set gpu 1')
     if h_p.use_point:
         if h_p.use_coverage:
             print('start build model with point and coverage')
@@ -55,4 +51,4 @@ if __name__ == "__main__":
     print('model created')
     #C.cntk_py.set_gpumemory_allocation_trace_level(1)
     para_train(vocab, w2i, model, max_epochs=2, epoch_size=638924687, minibatch_size=args.minibatch_size)
-    #train(vocab, w2i, model, max_epochs=2, epoch_size=638924687, minibatch_size=args.minibatch_size)
+    #train(vocab, w2i, model, max_epochs=1, epoch_size=args.epoch_size, minibatch_size=args.minibatch_size)

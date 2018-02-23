@@ -39,8 +39,8 @@ def create_model():
 
         # if encoder just has one bi-layer, then convert encoder input h,c
         if h_p.num_encoder_layer == 1:
-            h_dense = C.layers.Dense(h_p.hidden_dim, activation=C.relu, name='en2de_h')
-            c_dense = C.layers.Dense(h_p.hidden_dim, activation=C.relu, name='en2de_c')
+            h_dense = C.layers.Stabilizer() >> C.layers.Dense(h_p.hidden_dim, activation=C.relu, name='en2de_h')
+            c_dense = C.layers.Stabilizer() >> C.layers.Dense(h_p.hidden_dim, activation=C.relu, name='en2de_c')
 
         # decoder rec block
         decoder_first_block = C.layers.LSTM(h_p.hidden_dim)
@@ -52,9 +52,9 @@ def create_model():
         attention_model = C.layers.AttentionModel(h_p.attention_dim, name='attention_model')
 
         # dense layer for Pgen
-        pgen_h_att = C.layers.Dense(1, activation=None)
-        pgen_h = C.layers.Dense(1, activation=None)
-        pgen_x = C.layers.Dense(1, activation=None)
+        pgen_h_att = C.layers.Stabilizer() >> C.layers.Dense(1, activation=None)
+        pgen_h = C.layers.Stabilizer() >> C.layers.Dense(1, activation=None)
+        pgen_x = C.layers.Stabilizer() >> C.layers.Dense(1, activation=None)
 
         if h_p.use_point:
             if h_p.use_coverage:
@@ -129,14 +129,14 @@ def create_model():
                         r = C.layers.RecurrenceFrom(decoder_first_block)(C.sequence.last(encoded_h), encoded_c, x)
                         r = decoder(r)
 
-                    h_att = attention_model(C.pad(encoded_h, pattern=[(0, 1)], mode=C.ops.CONSTANT_PAD, constant_value=0), r[0])
+                    h_att = attention_model(encoded_h, r[0])
                     voc_dist = voc_out(C.splice(r[0], h_att))
 
                     att_w = C.reshape(h_att.attention_weights,(-1),name='att_w')
                     #print('att_w:\n%s'%repr(att_w))
-                    unpacked_att_w,att_mask = C.sequence.unpack(att_w, padding_value=0,name='unpack_att_w').outputs
+                    unpacked_att_w,_ = C.sequence.unpack(att_w, padding_value=0,name='unpack_att_w').outputs
                     #print('unpacked_att_w:%s'%repr(unpacked_att_w))
-                    extended_input_unpacked,input_mask = C.sequence.unpack(extended_input, padding_value=0,name='unpack_extended_in').outputs
+                    extended_input_unpacked,_ = C.sequence.unpack(extended_input, padding_value=0,name='unpack_extended_in').outputs
                     #print("extended_input_unpacked:%s"%repr(extended_input_unpacked))
                     att_dist_unpacked = C.times(unpacked_att_w, extended_input_unpacked)
                     #print("att_dist_unpacked:%s"%repr(att_dist_unpacked))
@@ -147,7 +147,7 @@ def create_model():
                     extend_dist = pgen*voc_extend_dist + (1 - pgen)*att_dist
                     #extend_dist = stab_out(extend_dist)
                     #print('extended_dist:%s' % repr(extend_dist))
-                    return extend_dist,voc_dist
+                    return extend_dist,voc_dist,pgen
         else:
             @C.Function
             def s2s(input, de_in):
